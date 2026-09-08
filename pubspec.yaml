@@ -1,0 +1,47 @@
+name: ln_app
+description: LectureNote AI mobile client.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management. Riverpod over Provider/Bloc: compile-safe dependency
+  # graph, trivial to override in tests, no BuildContext needed to read state.
+  flutter_riverpod: ^3.4.3
+  riverpod_annotation: ^4.0.7
+
+  # Routing with declarative redirects, which is what makes auth gating clean.
+  go_router: ^18.0.1
+
+  # HTTP client. Chosen over `http` for its interceptor pipeline - the silent
+  # token refresh below is impractical without it.
+  dio: ^5.7.0
+
+  # Tokens must not sit in SharedPreferences: Keychain on iOS, EncryptedSharedPreferences on Android.
+  flutter_secure_storage: ^11.0.0
+
+  # Immutable models + JSON codegen.
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+  flutter_markdown_plus: ^1.0.12
+  file_picker: ^12.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  build_runner: ^2.4.13
+  freezed: ^4.0.1
+  json_serializable: ^6.9.0
+  riverpod_generator: ^4.0.9
+
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true

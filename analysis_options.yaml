@@ -1,0 +1,29 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.freezed.dart"
+    - "**/*.g.dart"
+    - build/**
+    - android/**
+  errors:
+    # Generated code is absent until `build_runner` has run; keep this an error
+    # so a missing codegen step fails loudly rather than silently.
+    missing_required_param: error
+    missing_return: error
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_print
+    - prefer_final_locals
+    - prefer_single_quotes
+    # require_trailing_commas is deliberately absent: since Dart 3.7 the
+    # formatter decides trailing commas itself, and enabling the lint makes
+    # `dart format` and `flutter analyze` contradict each other.
+    - unawaited_futures
+    - use_super_parameters
