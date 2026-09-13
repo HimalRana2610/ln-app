@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/offline_banner.dart';
 import '../application/note_controller.dart';
 import '../data/note_models.dart';
 
@@ -29,7 +30,8 @@ class NoteDetailScreen extends ConsumerWidget {
             child: Text(error.toString(), textAlign: TextAlign.center),
           ),
         ),
-        data: (note) {
+        data: (cached) {
+          final note = cached.value;
           if (note.status != NoteStatus.ready) {
             return Center(
               child: Padding(
@@ -59,7 +61,7 @@ class NoteDetailScreen extends ConsumerWidget {
             );
           }
 
-          return Markdown(
+          final markdown = Markdown(
             data: note.markdown,
             selectable: true,
             padding: const EdgeInsets.all(20),
@@ -88,6 +90,14 @@ class NoteDetailScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
+          );
+
+          if (!cached.isOffline) return markdown;
+          return Column(
+            children: [
+              const OfflineBanner(),
+              Expanded(child: markdown),
+            ],
           );
         },
       ),

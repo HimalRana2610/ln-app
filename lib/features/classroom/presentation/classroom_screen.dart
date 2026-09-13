@@ -5,12 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../attendance/application/attendance_controller.dart';
+import '../../attendance/presentation/attendance_tab.dart';
+import '../../attendance/presentation/session_screens.dart';
+import '../../security/presentation/student_security_screen.dart';
 import '../../note/application/note_controller.dart';
 import '../../note/data/note_models.dart';
 import '../../note/presentation/create_note_sheet.dart';
 import '../../post/data/post_models.dart';
 import '../../post/presentation/post_sheets.dart';
 import '../../post/presentation/post_widgets.dart';
+import '../../quiz/presentation/quiz_tab.dart';
+import '../../../shared/widgets/offline_banner.dart';
 import '../application/classroom_controller.dart';
 import '../data/classroom_models.dart';
 
@@ -19,21 +25,31 @@ enum _Section {
   stream('Stream', PostKind.announcement),
   materials('Materials', PostKind.material),
   assignments('Assignments', PostKind.assignment),
-  notes('Notes', null);
+  notes('Notes', null),
+  attendance('Attendance', null),
+  quiz('Quiz', null);
 
   const _Section(this.label, this.kind);
 
   final String label;
 
-  /// The post kind shown in this section; null for notes.
+  /// The post kind shown in this section; null for notes, attendance and quiz.
   final PostKind? kind;
 }
 
 /// One classroom: announcements, materials, assignments and notes.
 class ClassroomScreen extends ConsumerStatefulWidget {
-  const ClassroomScreen({required this.classroomId, super.key});
+  const ClassroomScreen({
+    required this.classroomId,
+    this.initialTab,
+    super.key,
+  });
 
   final String classroomId;
+
+  /// A section name such as `assignments`, from the `?tab=` query. The to-do
+  /// list uses it to land on the assignment rather than the stream.
+  final String? initialTab;
 
   @override
   ConsumerState<ClassroomScreen> createState() => _ClassroomScreenState();
@@ -43,7 +59,14 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
     with SingleTickerProviderStateMixin {
   Timer? _pollTimer;
   late final TabController _tabs =
-      TabController(length: _Section.values.length, vsync: this)
+      TabController(
+    length: _Section.values.length,
+    vsync: this,
+    initialIndex: _Section.values
+        .firstWhere((s) => s.name == widget.initialTab,
+            orElse: () => _Section.stream)
+        .index,
+  )
         // Rebuild so the floating button matches the visible section.
         ..addListener(() {
           if (!_tabs.indexIsChanging) setState(() {});
@@ -122,6 +145,22 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
   /// The floating button for the visible section, or null when this person
   /// cannot add anything there.
   Widget? _fab(bool canManage) {
+    // The quiz composer lives inside the tab.
+    if (_section == _Section.quiz) return null;
+
+    if (_section == _Section.attendance) {
+      // Students join a session from its tile; only teachers start one.
+      if (!canManage) return null;
+      return FloatingActionButton.extended(
+        onPressed: () async {
+          await showStartSessionSheet(context, classroomId: classroomId);
+          ref.invalidate(attendanceSessionsProvider(classroomId));
+        },
+        icon: const Icon(Icons.bluetooth_audio),
+        label: const Text('Take attendance'),
+      );
+    }
+
     final kind = _section.kind;
     if (kind == null) {
       return FloatingActionButton.extended(
@@ -160,6 +199,21 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          if (canManage && classroom != null)
+            IconButton(
+              tooltip: 'Student security',
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => StudentSecurityScreen(
+                    classroomId: classroomId,
+                    classroomName: classroom.name,
+                  ),
+                ),
+              ),
+            ),
+        ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -193,6 +247,14 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
                 kind: kind,
                 canManage: canManage,
               )
+            else if (section == _Section.attendance)
+              AttendanceTab(classroomId: classroomId, canManage: canManage)
+            else if (section == _Section.quiz)
+              QuizTab(
+                classroomId: classroomId,
+                canManage: canManage,
+                visible: _section == _Section.quiz,
+              )
             else
               _notes(context),
         ],
@@ -212,7 +274,8 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
           padding: const EdgeInsets.all(32),
           children: [Text(error.toString(), textAlign: TextAlign.center)],
         ),
-        data: (notes) {
+        data: (cached) {
+          final notes = cached.value;
           // Scheduled out of the build pass: starting or cancelling a timer
           // during build would mutate state mid-render.
           WidgetsBinding.instance.addPostFrameCallback(
@@ -245,15 +308,22 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
             );
           }
 
-          return ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-            itemCount: notes.length,
-            itemBuilder: (context, index) => _NoteTile(
-              note: notes[index],
-              onOpen: () => context.push('/notes/${notes[index].id}'),
-              onDelete: () => _confirmDelete(notes[index]),
-            ),
+          return Column(
+            children: [
+              if (cached.isOffline) const OfflineBanner(),
+              Expanded(
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                  itemCount: notes.length,
+                  itemBuilder: (context, index) => _NoteTile(
+                    note: notes[index],
+                    onOpen: () => context.push('/notes/${notes[index].id}'),
+                    onDelete: () => _confirmDelete(notes[index]),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

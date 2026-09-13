@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/local_store.dart';
 import '../../auth/application/auth_controller.dart';
+import '../data/note_cache.dart';
 import '../data/note_models.dart';
 import '../data/note_repository.dart';
 
@@ -13,19 +15,36 @@ final noteRepositoryProvider = Provider<NoteRepository>((ref) {
   return NoteRepository(apiClient: ref.watch(apiClientProvider));
 });
 
+final noteCacheProvider = Provider<NoteCache>((ref) {
+  return NoteCache(ref.watch(localStoreProvider));
+});
+
 /// One classroom's notes, keyed by classroom id.
 ///
 /// A plain [FutureProvider.family] rather than a family notifier: Riverpod 3
 /// removed `FamilyAsyncNotifier`, and this needs no long-lived state anyway.
 /// Refreshing is `ref.invalidate`, which is also exactly what polling wants.
-final noteListProvider =
-    FutureProvider.family<List<NoteSummary>, String>((ref, classroomId) {
-  return ref.read(noteRepositoryProvider).list(classroomId);
+///
+/// Falls back to the saved copy when offline; [Cached.isOffline] says so.
+final noteListProvider = FutureProvider.family<Cached<List<NoteSummary>>,
+    String>((ref, classroomId) {
+  final cache = ref.read(noteCacheProvider);
+  return fetchWithOfflineCopy(
+    fetch: () => ref.read(noteRepositoryProvider).list(classroomId),
+    save: (notes) => cache.saveList(classroomId, notes),
+    read: () => cache.readList(classroomId),
+  );
 });
 
-/// A single note, including its Markdown body.
-final noteProvider = FutureProvider.family<Note, String>((ref, noteId) {
-  return ref.read(noteRepositoryProvider).get(noteId);
+/// A single note, including its Markdown body. Offline fallback as above.
+final noteProvider =
+    FutureProvider.family<Cached<Note>, String>((ref, noteId) {
+  final cache = ref.read(noteCacheProvider);
+  return fetchWithOfflineCopy(
+    fetch: () => ref.read(noteRepositoryProvider).get(noteId),
+    save: cache.saveNote,
+    read: () => cache.readNote(noteId),
+  );
 });
 
 /// Actions on a classroom's notes.

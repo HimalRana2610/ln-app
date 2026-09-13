@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/server_connection.dart';
 import '../../../core/network/token_storage.dart';
+import '../../push/push_service.dart';
 import '../data/auth_repository.dart';
 import '../data/models.dart';
 
@@ -86,6 +87,7 @@ class AuthController extends Notifier<AuthState> {
       final user = await _repository.restoreSession();
       state =
           user == null ? const AuthUnauthenticated() : AuthAuthenticated(user);
+      if (user != null) _registerPush();
     } on ApiException catch (error) {
       // The server could not be reached. The stored session is still valid, so
       // it is kept — this is a network problem, not a signed-out user.
@@ -97,6 +99,13 @@ class AuthController extends Notifier<AuthState> {
   Future<void> login({required String email, required String password}) async {
     final user = await _repository.login(email: email, password: password);
     state = AuthAuthenticated(user);
+    _registerPush();
+  }
+
+  /// Not awaited: asking for notification permission and reaching FCM must not
+  /// hold up the dashboard.
+  void _registerPush() {
+    ref.read(pushRegistrarProvider).onSignedIn();
   }
 
   /// Registers, then signs in with the same credentials.
@@ -115,7 +124,30 @@ class AuthController extends Notifier<AuthState> {
     await login(email: email, password: password);
   }
 
+  /// Re-reads the profile, e.g. after the email was verified.
+  Future<void> refreshUser() async {
+    state = AuthAuthenticated(await _repository.currentUser());
+  }
+
+  /// Saves profile changes and shows them everywhere at once.
+  Future<void> updateProfile({String? fullName, String? institute}) async {
+    state = AuthAuthenticated(await _repository.updateProfile(
+      fullName: fullName,
+      institute: institute,
+    ));
+  }
+
+  /// Throws [ApiException] (400 `incorrect_password`) on a wrong password, leaving the session as it
+  /// was. On success the router redirect takes the person to /login.
+  Future<void> deleteAccount({required String password}) async {
+    await _repository.deleteAccount(password: password);
+    await ref.read(pushRegistrarProvider).forget();
+    state = const AuthUnauthenticated(message: 'Your account was deleted.');
+  }
+
   Future<void> logout() async {
+    // Before the tokens go: removing the push token is an authenticated call.
+    await ref.read(pushRegistrarProvider).onSigningOut();
     await _repository.logout();
     state = const AuthUnauthenticated();
   }

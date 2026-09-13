@@ -63,6 +63,35 @@ class AuthRepository {
     return User.fromJson(json);
   }
 
+  /// Only the fields passed are changed.
+  Future<User> updateProfile({String? fullName, String? institute}) async {
+    final json = await _apiClient.request<Map<String, dynamic>>(
+      (dio) => dio.patch<Map<String, dynamic>>(
+        '/users/me',
+        data: {
+          if (fullName != null) 'full_name': fullName,
+          if (institute != null) 'institute': institute,
+        },
+      ),
+    );
+    return User.fromJson(json);
+  }
+
+  /// Deletes the account, then the local session.
+  ///
+  /// A wrong password comes back as a 400 `incorrect_password` — not a 401,
+  /// which the interceptor would treat as an expired session. Local tokens are
+  /// only cleared once the server has confirmed the deletion.
+  Future<void> deleteAccount({required String password}) async {
+    await _apiClient.request<void>(
+      (dio) => dio.post<void>(
+        '/users/me/delete',
+        data: {'password': password},
+      ),
+    );
+    await _tokenStorage.clear();
+  }
+
   /// Ends the session on the server, then locally.
   ///
   /// The network call is best-effort: local tokens are cleared regardless, so a

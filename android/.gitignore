@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Per-project Firebase config; see ANDROID_STUDIO.md section 9.
+app/google-services.json

@@ -47,3 +47,11 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Firebase Cloud Messaging is optional. The google-services plugin fails the
+// build when its config file is missing, and that file is per-project and not
+// committed, so apply it only when it exists. Without it the app runs with
+// push disabled (see createPushService in lib/features/push).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}

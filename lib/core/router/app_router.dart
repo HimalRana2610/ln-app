@@ -8,7 +8,11 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/classroom/presentation/classroom_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/note/presentation/note_detail_screen.dart';
+import '../../features/security/presentation/account_security_screen.dart';
+import '../../features/security/presentation/verify_email_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/splash_screen.dart';
+import '../../features/todo/presentation/todo_screen.dart';
 
 /// Routing, with auth enforced by a single [GoRouter.redirect].
 ///
@@ -34,7 +38,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '${Routes.classroom}/:classroomId',
         builder: (_, state) => ClassroomScreen(
           classroomId: state.pathParameters['classroomId']!,
+          initialTab: state.uri.queryParameters['tab'],
         ),
+      ),
+      GoRoute(path: Routes.todo, builder: (_, __) => const ToDoScreen()),
+      GoRoute(
+          path: Routes.settings, builder: (_, __) => const SettingsScreen()),
+      GoRoute(
+        path: Routes.verifyEmail,
+        builder: (_, __) => const VerifyEmailScreen(),
+      ),
+      GoRoute(
+        path: Routes.security,
+        builder: (_, __) => const AccountSecurityScreen(),
       ),
       GoRoute(
         path: '${Routes.note}/:noteId',
@@ -78,6 +94,10 @@ abstract final class Routes {
   static const dashboard = '/dashboard';
   static const classroom = '/classroom';
   static const note = '/notes';
+  static const verifyEmail = '/verify-email';
+  static const security = '/security';
+  static const todo = '/todo';
+  static const settings = '/settings';
 }
 
 /// Bridges Riverpod state changes to GoRouter's [Listenable]-based refresh.

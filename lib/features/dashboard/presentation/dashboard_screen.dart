@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/server_connection.dart';
+import '../../../core/router/app_router.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../classroom/application/classroom_controller.dart';
 import '../../classroom/data/classroom_models.dart';
@@ -92,9 +93,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 : const SizedBox.shrink(),
           ),
           IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+            tooltip: 'To-do',
+            icon: const Icon(Icons.checklist),
+            onPressed: () => context.push(Routes.todo),
+          ),
+          // Security and sign-out moved into Settings.
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push(Routes.settings),
           ),
         ],
       ),
@@ -107,6 +114,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         onRefresh: () => ref.read(classroomListProvider.notifier).refresh(),
         child: Column(
           children: [
+            if (!authState.user.isEmailVerified)
+              MaterialBanner(
+                leading: const Icon(Icons.mark_email_unread_outlined),
+                content: const Text('Verify your email to mark attendance.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => context.push(Routes.verifyEmail),
+                    child: const Text('Verify'),
+                  ),
+                ],
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(
