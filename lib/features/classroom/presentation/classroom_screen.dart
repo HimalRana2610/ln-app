@@ -8,10 +8,28 @@ import '../../../core/network/api_exception.dart';
 import '../../note/application/note_controller.dart';
 import '../../note/data/note_models.dart';
 import '../../note/presentation/create_note_sheet.dart';
+import '../../post/data/post_models.dart';
+import '../../post/presentation/post_sheets.dart';
+import '../../post/presentation/post_widgets.dart';
 import '../application/classroom_controller.dart';
 import '../data/classroom_models.dart';
 
-/// One classroom: its notes, and the button to generate a new one.
+/// The classroom's sections, in tab order. Matches the web client.
+enum _Section {
+  stream('Stream', PostKind.announcement),
+  materials('Materials', PostKind.material),
+  assignments('Assignments', PostKind.assignment),
+  notes('Notes', null);
+
+  const _Section(this.label, this.kind);
+
+  final String label;
+
+  /// The post kind shown in this section; null for notes.
+  final PostKind? kind;
+}
+
+/// One classroom: announcements, materials, assignments and notes.
 class ClassroomScreen extends ConsumerStatefulWidget {
   const ClassroomScreen({required this.classroomId, super.key});
 
@@ -21,14 +39,24 @@ class ClassroomScreen extends ConsumerStatefulWidget {
   ConsumerState<ClassroomScreen> createState() => _ClassroomScreenState();
 }
 
-class _ClassroomScreenState extends ConsumerState<ClassroomScreen> {
+class _ClassroomScreenState extends ConsumerState<ClassroomScreen>
+    with SingleTickerProviderStateMixin {
   Timer? _pollTimer;
+  late final TabController _tabs =
+      TabController(length: _Section.values.length, vsync: this)
+        // Rebuild so the floating button matches the visible section.
+        ..addListener(() {
+          if (!_tabs.indexIsChanging) setState(() {});
+        });
 
   String get classroomId => widget.classroomId;
+
+  _Section get _section => _Section.values[_tabs.index];
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _tabs.dispose();
     super.dispose();
   }
 
@@ -91,92 +119,143 @@ class _ClassroomScreenState extends ConsumerState<ClassroomScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final classroom = _classroom(ref);
-    final notesAsync = ref.watch(noteListProvider(classroomId));
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(classroom?.name ?? 'Classroom'),
-        bottom: classroom == null
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(28),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 16, bottom: 10),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${classroom.memberCount} '
-                      '${classroom.memberCount == 1 ? 'member' : 'members'} · '
-                      'Code ${classroom.code}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ),
-              ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+  /// The floating button for the visible section, or null when this person
+  /// cannot add anything there.
+  Widget? _fab(bool canManage) {
+    final kind = _section.kind;
+    if (kind == null) {
+      return FloatingActionButton.extended(
         onPressed: () => showCreateNoteSheet(context, classroomId: classroomId),
         icon: const Icon(Icons.auto_awesome),
         label: const Text('New note'),
+      );
+    }
+    // Only teachers post. The backend enforces it; hiding the button just
+    // avoids offering something that would fail.
+    if (!canManage) return null;
+
+    return FloatingActionButton.extended(
+      onPressed: () => showPostComposerSheet(
+        context,
+        classroomId: classroomId,
+        kind: kind,
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(noteListProvider(classroomId)),
-        child: notesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(32),
-            children: [Text(error.toString(), textAlign: TextAlign.center)],
-          ),
-          data: (notes) {
-            // Scheduled out of the build pass: starting or cancelling a timer
-            // during build would mutate state mid-render.
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _syncPolling(notes),
-            );
+      icon: Icon(switch (kind) {
+        PostKind.announcement => Icons.campaign_outlined,
+        PostKind.material => Icons.upload_file,
+        PostKind.assignment => Icons.assignment_add,
+      }),
+      label: Text(switch (kind) {
+        PostKind.announcement => 'Announce',
+        PostKind.material => 'Upload',
+        PostKind.assignment => 'Assign',
+      }),
+    );
+  }
 
-            if (notes.isEmpty) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
-                children: [
-                  Icon(
-                    Icons.note_alt_outlined,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No notes yet.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Upload a recording, paste text, or drop in a YouTube link.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              );
-            }
+  @override
+  Widget build(BuildContext context) {
+    final classroom = _classroom(ref);
+    final canManage = classroom?.myRole.canEditClassroom ?? false;
 
-            return ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-              itemCount: notes.length,
-              itemBuilder: (context, index) => _NoteTile(
-                note: notes[index],
-                onOpen: () => context.push('/notes/${notes[index].id}'),
-                onDelete: () => _confirmDelete(notes[index]),
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(classroom?.name ?? 'Classroom'),
+            if (classroom != null)
+              Text(
+                '${classroom.memberCount} '
+                '${classroom.memberCount == 1 ? 'member' : 'members'} · '
+                'Code ${classroom.code}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-            );
-          },
+          ],
         ),
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: [
+            for (final section in _Section.values) Tab(text: section.label)
+          ],
+        ),
+      ),
+      floatingActionButton: _fab(canManage),
+      body: TabBarView(
+        controller: _tabs,
+        children: [
+          for (final section in _Section.values)
+            if (section.kind case final kind?)
+              PostListView(
+                classroomId: classroomId,
+                kind: kind,
+                canManage: canManage,
+              )
+            else
+              _notes(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _notes(BuildContext context) {
+    final notesAsync = ref.watch(noteListProvider(classroomId));
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(noteListProvider(classroomId)),
+      child: notesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(32),
+          children: [Text(error.toString(), textAlign: TextAlign.center)],
+        ),
+        data: (notes) {
+          // Scheduled out of the build pass: starting or cancelling a timer
+          // during build would mutate state mid-render.
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _syncPolling(notes),
+          );
+
+          if (notes.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
+              children: [
+                Icon(
+                  Icons.note_alt_outlined,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No notes yet.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Upload a recording, paste text, or drop in a YouTube link.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            );
+          }
+
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+            itemCount: notes.length,
+            itemBuilder: (context, index) => _NoteTile(
+              note: notes[index],
+              onOpen: () => context.push('/notes/${notes[index].id}'),
+              onDelete: () => _confirmDelete(notes[index]),
+            ),
+          );
+        },
       ),
     );
   }

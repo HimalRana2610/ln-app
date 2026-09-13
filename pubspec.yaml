@@ -30,6 +30,8 @@ dependencies:
   json_annotation: ^4.9.0
   flutter_markdown_plus: ^1.0.12
   file_picker: ^12.2.0
+  path_provider: ^2.1.6
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

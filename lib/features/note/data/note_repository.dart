@@ -71,10 +71,14 @@ class NoteRepository {
       );
 
   /// Reserve a storage slot for a file.
+  ///
+  /// [purpose] is `note` for lecture recordings and PDFs, or `attachment` for
+  /// classroom materials and submissions, which allow many more file types.
   Future<PresignedUpload> presignUpload({
     required String filename,
     required String contentType,
     required int sizeBytes,
+    String purpose = 'note',
   }) async {
     final json = await _apiClient.request<Map<String, dynamic>>(
       (dio) => dio.post<Map<String, dynamic>>(
@@ -83,6 +87,7 @@ class NoteRepository {
           'filename': filename,
           'content_type': contentType,
           'size_bytes': sizeBytes,
+          'purpose': purpose,
         },
       ),
     );
