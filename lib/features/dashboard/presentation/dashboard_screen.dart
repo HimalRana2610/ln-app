@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/server_connection.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../classroom/application/classroom_controller.dart';
 import '../../classroom/data/classroom_models.dart';
 import '../../classroom/presentation/class_sheets.dart';
 import '../../classroom/presentation/widgets/class_card.dart';
+import '../../settings/presentation/server_settings.dart';
 
 /// Home screen: the Public/Private segmented control, the class list, and the
 /// create/join actions — laid out to match the web client and the old app.
@@ -77,6 +79,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       appBar: AppBar(
         title: const Text('LectureNote AI'),
         actions: [
+          // Only meaningful against a backend on this network; a deployed one
+          // does not move.
+          ValueListenableBuilder<ServerStatus>(
+            valueListenable: ref.watch(serverConnectionProvider).status,
+            builder: (context, status, _) => status.isLocal
+                ? IconButton(
+                    tooltip: 'Server · ${status.label}',
+                    icon: const Icon(Icons.dns_outlined),
+                    onPressed: () => showServerSheet(context),
+                  )
+                : const SizedBox.shrink(),
+          ),
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),

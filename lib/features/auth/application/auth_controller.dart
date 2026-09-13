@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/server_connection.dart';
 import '../../../core/network/token_storage.dart';
 import '../data/auth_repository.dart';
 import '../data/models.dart';
@@ -41,6 +42,9 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
     tokenStorage: ref.watch(tokenStorageProvider),
+    // Where to send is decided per request, so a backend that changes address
+    // is followed without rebuilding this provider and everything under it.
+    server: ref.watch(serverConnectionProvider),
     // When a refresh fails, the interceptor calls this and the whole app
     // reacts - the router redirect sends the user to /login.
     onSessionExpired: () async {
@@ -73,9 +77,20 @@ class AuthController extends Notifier<AuthState> {
   AuthRepository get _repository => ref.read(authRepositoryProvider);
 
   Future<void> restoreSession() async {
-    final user = await _repository.restoreSession();
-    state =
-        user == null ? const AuthUnauthenticated() : AuthAuthenticated(user);
+    // Find the backend before the first request rather than as a side effect of
+    // it, so the login screen can show which server it is about to talk to and
+    // signing in is not delayed by the search.
+    await ref.read(serverConnectionProvider).ensureLocated();
+
+    try {
+      final user = await _repository.restoreSession();
+      state =
+          user == null ? const AuthUnauthenticated() : AuthAuthenticated(user);
+    } on ApiException catch (error) {
+      // The server could not be reached. The stored session is still valid, so
+      // it is kept — this is a network problem, not a signed-out user.
+      state = AuthUnauthenticated(message: error.message);
+    }
   }
 
   /// Signs in. Throws [ApiException] so the form can show the message.

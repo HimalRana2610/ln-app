@@ -31,11 +31,16 @@ it can be understood — or deleted — without hunting through four directories
 lib/
 ├── main.dart
 ├── core/                         Cross-cutting infrastructure
-│   ├── config/app_config.dart    Build-time configuration
+│   ├── config/
+│   │   ├── app_config.dart       Build-time configuration
+│   │   └── server_url.dart       Address parsing and normalization
 │   ├── network/
 │   │   ├── api_client.dart       Dio setup, error mapping
 │   │   ├── auth_interceptor.dart Token attach + silent refresh
 │   │   ├── api_exception.dart    One error type for the whole app
+│   │   ├── server_locator.dart   Finds the backend on this network
+│   │   ├── server_connection.dart The address in use, and its state
+│   │   ├── server_storage.dart   Remembers the address that worked
 │   │   └── token_storage.dart    Secure storage wrapper
 │   ├── router/app_router.dart    Routes + the auth redirect
 │   └── theme/app_theme.dart      Design tokens
@@ -45,6 +50,7 @@ lib/
 │   │   ├── application/          Controller (Riverpod notifier)
 │   │   └── presentation/         Screens + validators
 │   ├── dashboard/presentation/
+│   ├── settings/presentation/    The server picker
 │   └── splash/
 └── shared/widgets/               Reusable UI primitives
 ```
@@ -81,34 +87,53 @@ refresh cannot trigger another refresh.
 | `dart run build_runner build --delete-conflicting-outputs` | **Required before first run** — generates the model files |
 | `dart run build_runner watch -d` | Regenerate on save |
 | `flutter devices` | List connected phones |
-| `flutter run --dart-define=API_BASE_URL=…` | Run on the connected phone |
+| `flutter run` | Run on the connected phone — the server is found automatically |
 | `flutter test` | Run tests — no phone needed |
 | `flutter analyze` | Static analysis |
 | `dart format lib test` | Format |
 | `flutter build apk --release` | Release APK |
 
-## Configuration
+## Finding the server
+
+**You do not need to configure an address.** The app finds the backend itself,
+because a development machine on DHCP does not keep one: the address changes
+when the lease renews, when the laptop moves between Wi-Fi and Ethernet, and
+whenever you join another network. Baking one in at build time meant a rebuild
+every time that happened.
+
+`ServerLocator` searches in two stages, cheapest first:
+
+| Stage | Tried |
+| --- | --- |
+| Known addresses | The one that worked last time · `API_BASE_URL` if given · `localhost` (works over `adb reverse`) · `10.0.2.2` (emulator) |
+| Sweep | Every address on the phone's own /24, tested for an open port 8000 and then confirmed with a real `/health` call |
+
+The confirming call matters: other devices on a home network answer on port
+8000, and only a correct `{"status": "ok"}` identifies ours. Whatever is found
+is remembered, so later launches skip straight to it, and a request that cannot
+reach the server triggers one fresh search and a retry — a changed address
+heals itself mid-session instead of surfacing as an error.
+
+The address is also shown on the login screen and in the dashboard app bar,
+where **Change** opens a picker to type one in or re-run the search. That is the
+fallback for a network where devices cannot see each other, such as a campus
+Wi-Fi with client isolation.
+
+Start the backend with `--host 0.0.0.0` so it accepts connections from the
+phone at all.
+
+### Configuration
 
 All configuration is `--dart-define`, so nothing environment-specific is
 committed.
 
 | Define | Default | Notes |
 | --- | --- | --- |
-| `API_BASE_URL` | `http://10.0.2.2:8000/api/v1` on Android, `http://localhost:8000/api/v1` otherwise | Must include `/api/v1` |
+| `API_BASE_URL` | none | Optional. Seeds the search — tried first, then discovery takes over if it does not answer. Must include `/api/v1` |
+| `API_PORT` | `8000` | The port the sweep looks for |
 
-> The Android default `10.0.2.2` is an **emulator-only** alias for the host
-> machine. On a physical phone you must pass your PC's LAN address explicitly:
->
-> ```bash
-> flutter run --dart-define=API_BASE_URL=http://192.168.1.5:8000/api/v1
-> ```
->
-> and start the backend with `--host 0.0.0.0`. Getting this wrong is the single
-> most common cause of "Could not reach the server".
-
-In Android Studio, set this once under **Run → Edit Configurations → Additional
-run args** so the ▶ button works — see
-[../ANDROID_STUDIO.md](../ANDROID_STUDIO.md).
+Set `API_BASE_URL` only for a deployed backend, where there is nothing on the
+local network to find.
 
 ## Conventions
 

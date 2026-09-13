@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/router/app_router.dart';
+import '../../settings/presentation/server_settings.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/form_error.dart';
@@ -126,6 +127,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           : () => context.push(Routes.register),
                       child: const Text('New here? Create an account'),
                     ),
+                    // Sign-in is where a wrong server address is discovered, so
+                    // the way to correct one belongs here rather than behind a
+                    // settings screen the user cannot reach until signed in.
+                    const SizedBox(height: 8),
+                    const ServerStatusBar(),
                   ],
                 ),
               ),

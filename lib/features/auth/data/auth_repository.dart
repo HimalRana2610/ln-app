@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/token_storage.dart';
 import 'models.dart';
 
@@ -84,16 +85,24 @@ class AuthRepository {
   }
 
   /// Restores a session on cold start, or null if there is none.
+  ///
+  /// Throws [ApiException] when the server could not be reached, rather than
+  /// reporting "no session". Discarding tokens because a laptop was asleep or
+  /// had changed address would sign the user out of a session that is
+  /// perfectly valid, and they would have no way to tell why.
   Future<User?> restoreSession() async {
     if (!await _tokenStorage.hasSession()) return null;
 
     try {
       return await currentUser();
-    } on DioException {
+    } on ApiException catch (error) {
+      if (error.isNetworkFailure) rethrow;
+
+      // The interceptor already tried to refresh; reaching here means the
+      // session itself is no longer good.
       await _tokenStorage.clear();
       return null;
-    } on Exception {
-      // The interceptor already tried to refresh; reaching here means it failed.
+    } on DioException {
       await _tokenStorage.clear();
       return null;
     }

@@ -4,18 +4,18 @@ import 'package:ln_app/features/note/data/note_models.dart';
 void main() {
   // A real payload from GET /api/v1/classrooms/{id}/notes.
   Map<String, dynamic> summaryPayload() => {
-    'id': '11111111-2222-3333-4444-555555555555',
-    'classroom_id': '82ad84fc-0f66-4357-a982-d46a23d592ee',
-    'date': '2026-09-07',
-    'title': 'Graph Theory',
-    'status': 'ready',
-    'source_type': 'audio',
-    'author_id': '66666666-7777-8888-9999-000000000000',
-    'author_name': 'Grace Hopper',
-    'duration_seconds': 3600,
-    'error_message': null,
-    'created_at': '2026-09-07T10:30:00Z',
-  };
+        'id': '11111111-2222-3333-4444-555555555555',
+        'classroom_id': '82ad84fc-0f66-4357-a982-d46a23d592ee',
+        'date': '2026-09-07',
+        'title': 'Graph Theory',
+        'status': 'ready',
+        'source_type': 'audio',
+        'author_id': '66666666-7777-8888-9999-000000000000',
+        'author_name': 'Grace Hopper',
+        'duration_seconds': 3600,
+        'error_message': null,
+        'created_at': '2026-09-07T10:30:00Z',
+      };
 
   group('NoteSummary.fromJson', () {
     test('maps snake_case wire fields onto camelCase Dart fields', () {
